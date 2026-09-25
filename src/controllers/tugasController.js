@@ -1,11 +1,11 @@
 const { v4: buatUuid } = require('uuid');
 const { db } = require('../database/koneksi');
 
-const semuaTugas = (req, res, next) => {
+const semuaTugas = async (req, res, next) => {
   try {
-    const daftarTugas = db.prepare('SELECT * FROM tugas ORDER BY dibuat_pada DESC').all();
+    const { rows } = await db.query('SELECT * FROM tugas ORDER BY dibuat_pada DESC');
 
-    const hasilFormatted = daftarTugas.map(formatTugas);
+    const hasilFormatted = rows.map(formatTugas);
 
     res.status(200).json({
       success: true,
@@ -17,12 +17,12 @@ const semuaTugas = (req, res, next) => {
   }
 };
 
-const tugasBerdasarkanId = (req, res, next) => {
+const tugasBerdasarkanId = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const tugasDitemukan = db.prepare('SELECT * FROM tugas WHERE id = ?').get(id);
+    const { rows } = await db.query('SELECT * FROM tugas WHERE id = $1', [id]);
 
-    if (!tugasDitemukan) {
+    if (rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: `Tugas dengan id "${id}" tidak ditemukan`,
@@ -31,48 +31,50 @@ const tugasBerdasarkanId = (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: formatTugas(tugasDitemukan),
+      data: formatTugas(rows[0]),
     });
   } catch (err) {
     next(err);
   }
 };
 
-const buatTugas = (req, res, next) => {
+const buatTugas = async (req, res, next) => {
   try {
     const { title, description = '', status = 'pending', priority = 'medium' } = req.body;
 
     const idBaru = buatUuid();
     const waktuSekarang = new Date().toISOString();
 
-    db.prepare(`
+    await db.query(`
       INSERT INTO tugas (id, judul, deskripsi, status, prioritas, dibuat_pada, diperbarui_pada)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(idBaru, title, description, status, priority, waktuSekarang, waktuSekarang);
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [idBaru, title, description, status, priority, waktuSekarang, waktuSekarang]);
 
-    const tugas = db.prepare('SELECT * FROM tugas WHERE id = ?').get(idBaru);
+    const { rows } = await db.query('SELECT * FROM tugas WHERE id = $1', [idBaru]);
 
     res.status(201).json({
       success: true,
       message: 'Tugas berhasil dibuat',
-      data: formatTugas(tugas),
+      data: formatTugas(rows[0]),
     });
   } catch (err) {
     next(err);
   }
 };
 
-const updateTugas = (req, res, next) => {
+const updateTugas = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const tugasLama = db.prepare('SELECT * FROM tugas WHERE id = ?').get(id);
+    const { rows: rowsLama } = await db.query('SELECT * FROM tugas WHERE id = $1', [id]);
 
-    if (!tugasLama) {
+    if (rowsLama.length === 0) {
       return res.status(404).json({
         success: false,
         message: `Tugas dengan id "${id}" tidak ditemukan`,
       });
     }
+    
+    const tugasLama = rowsLama[0];
 
     const { title, description, status, priority } = req.body;
     const judulBaru = title !== undefined ? title : tugasLama.judul;
@@ -81,31 +83,31 @@ const updateTugas = (req, res, next) => {
     const prioritasBaru = priority !== undefined ? priority : tugasLama.prioritas;
     const waktuUpdate = new Date().toISOString();
 
-    db.prepare(`
-      UPDATE tugas SET judul = ?, deskripsi = ?, status = ?, prioritas = ?, diperbarui_pada = ?
-      WHERE id = ?
-    `).run(judulBaru, deskripsiBaru, statusBaru, prioritasBaru, waktuUpdate, id);
+    await db.query(`
+      UPDATE tugas SET judul = $1, deskripsi = $2, status = $3, prioritas = $4, diperbarui_pada = $5
+      WHERE id = $6
+    `, [judulBaru, deskripsiBaru, statusBaru, prioritasBaru, waktuUpdate, id]);
 
-    const tugasTerbaru = db.prepare('SELECT * FROM tugas WHERE id = ?').get(id);
+    const { rows: rowsBaru } = await db.query('SELECT * FROM tugas WHERE id = $1', [id]);
 
     res.status(200).json({
       success: true,
       message: 'Tugas berhasil diperbarui',
-      data: formatTugas(tugasTerbaru),
+      data: formatTugas(rowsBaru[0]),
     });
   } catch (err) {
     next(err);
   }
 };
 
-const updateStatus = (req, res, next) => {
+const updateStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const tugasDitemukan = db.prepare('SELECT * FROM tugas WHERE id = ?').get(id);
+    const { rows: rowsLama } = await db.query('SELECT * FROM tugas WHERE id = $1', [id]);
 
-    if (!tugasDitemukan) {
+    if (rowsLama.length === 0) {
       return res.status(404).json({
         success: false,
         message: `Tugas dengan id "${id}" tidak ditemukan`,
@@ -114,37 +116,37 @@ const updateStatus = (req, res, next) => {
 
     const waktuUpdate = new Date().toISOString();
 
-    db.prepare('UPDATE tugas SET status = ?, diperbarui_pada = ? WHERE id = ?').run(
+    await db.query('UPDATE tugas SET status = $1, diperbarui_pada = $2 WHERE id = $3', [
       status,
       waktuUpdate,
       id
-    );
+    ]);
 
-    const tugasTerbaru = db.prepare('SELECT * FROM tugas WHERE id = ?').get(id);
+    const { rows: rowsBaru } = await db.query('SELECT * FROM tugas WHERE id = $1', [id]);
 
     res.status(200).json({
       success: true,
       message: 'Status tugas berhasil diperbarui',
-      data: formatTugas(tugasTerbaru),
+      data: formatTugas(rowsBaru[0]),
     });
   } catch (err) {
     next(err);
   }
 };
 
-const hapusTugas = (req, res, next) => {
+const hapusTugas = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const tugasDitemukan = db.prepare('SELECT * FROM tugas WHERE id = ?').get(id);
+    const { rows } = await db.query('SELECT * FROM tugas WHERE id = $1', [id]);
 
-    if (!tugasDitemukan) {
+    if (rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: `Tugas dengan id "${id}" tidak ditemukan`,
       });
     }
 
-    db.prepare('DELETE FROM tugas WHERE id = ?').run(id);
+    await db.query('DELETE FROM tugas WHERE id = $1', [id]);
 
     res.status(200).json({
       success: true,

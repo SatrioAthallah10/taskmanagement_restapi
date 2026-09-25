@@ -1,26 +1,17 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
+require('dotenv').config();
 const { logger } = require('../utils/logger');
 
-const jalurDatabase = path.join(__dirname, '../../data/tugas.db');
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-const db = new Database(jalurDatabase);
-
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS tugas (
-    id TEXT PRIMARY KEY,
-    judul TEXT NOT NULL,
-    deskripsi TEXT,
-    status TEXT NOT NULL DEFAULT 'pending',
-    prioritas TEXT NOT NULL DEFAULT 'medium',
-    dibuat_pada TEXT NOT NULL,
-    diperbarui_pada TEXT NOT NULL
-  )
-`);
-
-logger.info('Database terhubung dan tabel siap');
+db.connect()
+  .then(() => {
+    logger.info('Database terhubung ke PostgreSQL');
+  })
+  .catch((err) => {
+    logger.error('Error menghubungkan ke PostgreSQL', err);
+  });
 
 module.exports = { db };
