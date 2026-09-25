@@ -1,0 +1,8 @@
+const { aplikasi } = require('./src/app');
+const { logger } = require('./src/utils/logger');
+
+const PORT = process.env.PORT || 3000;
+
+aplikasi.listen(PORT, () => {
+  logger.info(`Server berjalan di port ${PORT}`);
+});
